@@ -90,9 +90,9 @@ class Ant():
             return self.pheromone_type
 
     
-    def get_inputs(self, pheromone_system, radius=5): # Le rayon a une grande importance sur la fluidité de la simulation, valeur élevé = cout computionnel élevé
+    def get_inputs(self, pheromone_system, ants, radius=5):
         x, y = int(self.pos[0]), int(self.pos[1])
-        
+
         # Niveaux de phéromones autour de la fourmi dans un rayon
         surrounding_pheromones_food = 0
         surrounding_pheromones_path = 0
@@ -102,35 +102,43 @@ class Ant():
                     surrounding_pheromones_food += pheromone_system.get_pheromone_level(x + i, y + j, 0)
                     surrounding_pheromones_path += pheromone_system.get_pheromone_level(x + i, y + j, 1)
 
+        # Trouver les trois fourmis les plus proches
+        distances = []
+        for ant in ants:
+            if ant != self:  # Ne pas inclure la fourmi actuelle
+                distance = np.linalg.norm(self.pos - ant.pos)  # Distance Euclidienne
+                distances.append((distance, ant.pos))
+
+        # Trier les fourmis par distance et garder les trois plus proches
+        distances.sort(key=lambda x: x[0])
+        closest_ants = distances[:3]
+
+        # Si moins de trois fourmis, remplir avec des zéros
+        while len(closest_ants) < 3:
+            closest_ants.append((0, np.array([0, 0])))
+
+        # Extraire les positions des fourmis les plus proches
+        ant1_pos = closest_ants[0][1]
+        ant2_pos = closest_ants[1][1]
+        ant3_pos = closest_ants[2][1]
+
+        # Créer la liste des entrées pour le réseau neuronal
         self.input = [
             self.pos[0],  # Position x de la fourmi
             self.pos[1],  # Position y de la fourmi
             1 if self.has_food else 0,  # Booléen si elle possède de la nourriture
             surrounding_pheromones_food,  # Somme des phéromones de nourriture dans le voisinage
-            surrounding_pheromones_path   # Somme des phéromones de chemin dans le voisinage
+            surrounding_pheromones_path,  # Somme des phéromones de chemin dans le voisinage
+            ant1_pos[0], ant1_pos[1],  # Position de la fourmi la plus proche
+            ant2_pos[0], ant2_pos[1],  # Position de la deuxième fourmi la plus proche
+            ant3_pos[0], ant3_pos[1]   # Position de la troisième fourmi la plus proche
         ]
         
         return self.input
 
+
     def move_with_neat(self, output, env_size, pheromone_system, ants):
-        if not self.is_dead:
-            # Obtenir les niveaux de phéromones autour de la fourmi
-            x, y = int(self.pos[0]), int(self.pos[1])
-            food_pheromone_level = None
-            path_pheromone_level = None
-            if x and y < env_size[0]:
-                food_pheromone_level = pheromone_system.get_pheromone_level(x, y, 0)  # Phéromones de nourriture
-                path_pheromone_level = pheromone_system.get_pheromone_level(x, y, 1)  # Phéromones de chemin
-
-            # Utiliser ces informations comme entrée du réseau neuronal
-            self.inputs = [
-                self.pos[0],  # Position x de la fourmi
-                self.pos[1],  # Position y de la fourmi
-                1 if self.has_food else 0,  # Booléen si elle possède de la nourriture
-                food_pheromone_level,  # Niveau de phéromones de nourriture
-                path_pheromone_level   # Niveau de phéromones de chemin
-            ]
-
+        
             # Les deux premières sorties sont le vecteur directionnel (dx, dy)
             dx = output[0]
             dy = output[1]
@@ -296,7 +304,7 @@ class Colony:
             if not ant.is_dead:
                 if i < len(networks):
                     genome, net = networks[i]  # Récupérer le réseau neuronal et le génome associé à cette fourmi
-                    inputs = ant.get_inputs(self.pheromone_system)  # Obtenir les entrées du réseau pour la fourmi
+                    inputs = ant.get_inputs(self.pheromone_system, self.ants)  # Obtenir les entrées du réseau pour la fourmi
                     
                     output = net.activate(inputs)  # Activer le réseau neuronal
                     
