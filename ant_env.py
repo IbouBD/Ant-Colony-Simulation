@@ -2,6 +2,7 @@ import pygame
 import numpy as np
 import random
 import neat
+import pickle
 
 
 bg_color = (14, 255, 145)  # Couleur de fond
@@ -340,68 +341,81 @@ class AntColonyPygame(Colony):
 
 
     def check_collisions_neat(self, networks):
+        """
+        Gère les collisions entre les fourmis, les murs, les zones mortelles, et la nourriture,
+        tout en gérant les réseaux neuronaux associés.
+        """
         for ant in self.ants:
+            # Collision avec les murs
             for wall in self.wall:
-                for zone in self.death_zone:
-                    for food in self.food:
+                if ant.circle.colliderect(wall.rect):
+                    self.handle_wall_collision(ant, wall)
 
-                        if ant.circle.colliderect(wall.rect):
-                            
-                            overlap_left = ant.circle.right - wall.rect.left
-                            overlap_right = wall.rect.right - ant.circle.left
-                            overlap_top = ant.circle.bottom - wall.rect.top
-                            overlap_bottom = wall.rect.bottom - ant.circle.top
-                            
-                            # Trouver la direction de la plus petite pénétration
-                            min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
-                            
-                            if min_overlap == overlap_left:
-                                # Collision du côté gauche du mur
-                                ant.pos[0] = wall.rect.left - ant.circle.width / 2
-                                ant.update_vec_director[0] *= -1  # Inverser la direction horizontale
-                                ant.update_vec_director += np.random.uniform(-0.2, 0.2, 2)
-                            elif min_overlap == overlap_right:
-                                # Collision du côté droit du mur
-                                ant.pos[0] = wall.rect.right + ant.circle.width / 2
-                                ant.update_vec_director[0] *= -1  # Inverser la direction horizontale
-                                ant.update_vec_director += np.random.uniform(-0.2, 0.2, 2)
-                            elif min_overlap == overlap_top:
-                                # Collision avec le haut du mur
-                                ant.pos[1] = wall.rect.top - ant.circle.height / 2
-                                ant.update_vec_director[1] *= -1  # Inverser la direction verticale
-                                ant.update_vec_director += np.random.uniform(-0.2, 0.2, 2)
-                            elif min_overlap == overlap_bottom:
-                                # Collision avec le bas du mur
-                                ant.pos[1] = wall.rect.bottom + ant.circle.height / 2
-                                ant.update_vec_director[1] *= -1  # Inverser la direction verticale
-                                ant.update_vec_director += np.random.uniform(-0.2, 0.2, 2)
-                            
-                            # Ajuster la position de la fourmi
-                            ant.circle.center = ant.pos
-                            
-                            # Ajouter un petit décalage aléatoire pour éviter les blocages
-                            ant.update_vec_director += np.random.uniform(-0.1, 0.1, 2)
-                            ant.update_vec_director = ant.update_vec_director / np.linalg.norm(ant.update_vec_director)
-                            
+            # Collision avec les zones mortelles
+            for zone in self.death_zone:
+                if ant.circle.colliderect(zone.rect):
+                    self.handle_death_zone_collision(ant, networks)
+                    break  # Sortir de la boucle, car la fourmi est morte
 
-                        elif ant.circle.colliderect(zone.rect):
-                            ant.is_dead == True
-                            if ant in self.ants:
-                                self.ants.remove(ant)
-                                for i, ant in enumerate(self.ants):
-                                    g, net = networks[i]
-                                    if g and net in networks:
-                                        networks.remove(g)
-                                        networks.remove(net)
-                            
-                             
-                        elif ant.circle.colliderect(food.rect):
-                            if ant.has_food == False:    
-                                if food in self.food:
-                                    self.food.remove(food)
-                                ant.has_food = True
-                            else:
-                                pass
+            # Collision avec la nourriture (si elle n'en a pas déjà)
+            if not ant.has_food:
+                for food in self.food:
+                    if ant.circle.colliderect(food.rect):
+                        self.handle_food_collision(ant, food)
+                        break  # Sortir de la boucle après la collecte de la nourriture
+
+    def handle_wall_collision(self, ant, wall):
+        """
+        Gère la collision entre une fourmi et un mur en ajustant sa position et sa direction.
+        """
+        overlap_left = ant.circle.right - wall.rect.left
+        overlap_right = wall.rect.right - ant.circle.left
+        overlap_top = ant.circle.bottom - wall.rect.top
+        overlap_bottom = wall.rect.bottom - ant.circle.top
+
+        # Trouver la direction de la plus petite pénétration
+        min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+
+        if min_overlap == overlap_left:
+            ant.pos[0] = wall.rect.left - ant.circle.width / 2
+            ant.update_vec_director[0] *= -1
+        elif min_overlap == overlap_right:
+            ant.pos[0] = wall.rect.right + ant.circle.width / 2
+            ant.update_vec_director[0] *= -1
+        elif min_overlap == overlap_top:
+            ant.pos[1] = wall.rect.top - ant.circle.height / 2
+            ant.update_vec_director[1] *= -1
+        elif min_overlap == overlap_bottom:
+            ant.pos[1] = wall.rect.bottom + ant.circle.height / 2
+            ant.update_vec_director[1] *= -1
+
+        # Ajouter un petit décalage aléatoire pour éviter les blocages
+        ant.update_vec_director += np.random.uniform(-0.1, 0.1, 2)
+        ant.update_vec_director = ant.update_vec_director / np.linalg.norm(ant.update_vec_director)
+        ant.circle.center = ant.pos  # Ajuster la position de la fourmi
+
+    def handle_death_zone_collision(self, ant, networks):
+        """
+        Gère la collision entre une fourmi et une zone mortelle,
+        en marquant la fourmi comme morte et en retirant le réseau neuronal associé.
+        """
+        ant.is_dead = True
+        if ant in self.ants:
+            self.ants.remove(ant)
+
+            # Retirer le réseau neuronal associé à cette fourmi
+            for i, (genome, net) in enumerate(networks):
+                if genome and net:
+                    networks.pop(i)
+                    break  # Sortir après avoir retiré le réseau
+
+    def handle_food_collision(self, ant, food):
+        """
+        Gère la collision entre une fourmi et de la nourriture.
+        """
+        if food in self.food:
+            self.food.remove(food)
+        ant.has_food = True
 
     def check_collisions(self):
         for ant in self.ants:
@@ -581,7 +595,7 @@ class AntColonyPygame(Colony):
 
 # Initialisation de la simulation
 env_size = (800, 800)
-generations = 500
+generations = 2000
 config_path = 'config.txt'
 steps = 600
 # Configuration NEAT
@@ -680,7 +694,19 @@ def run(config_path):
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
-    winner = p.run(eval_genomes, generations)
+
+    try:
+        winner = p.run(eval_genomes, generations)
+    except neat.CompleteExtinctionException:
+        print("Extinction complète : réinitialisation de la population.")
+        p = neat.Population(config)  # Réinitialiser la population avec la même configuration
+        winner = p.run(eval_genomes, generations)
+
+    with open('best_genome.pkl', 'wb') as f:
+        pickle.dump(winner, f)
+
+    with open('population.pkl', 'wb') as f:
+        pickle.dump(p.population, f)
 
 run(config_path)
 """
