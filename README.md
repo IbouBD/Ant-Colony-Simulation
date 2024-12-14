@@ -40,34 +40,6 @@ pip install neat-python numpy pygame pickle
 - **Évolution Neuro-Evolution** : Utilisation de l'algorithme NEAT pour faire évoluer les comportements des fourmis.
 - **Fitness Adaptatif** : Fonction de fitness pour encourager la collecte de fruits, la collaboration et l'exploration efficace.
 
-## Exemples de Code
-
-### Fonction de Fitness
-
-```python
-def compute_fitness(self, ant):
-    fitness = 0
-    if ant.has_food:
-        fitness += 1
-    x, y = int(ant.pos[0]), int(ant.pos[1])
-    if (x, y) == self.colony_pos and ant.has_food:
-        fitness += 4
-        ant.has_food = False
-    if self.total_food_collected > 0:
-        progress_ratio = self.total_food_collected / self.num_food
-        fitness += 3 * progress_ratio
-    if ant.is_dead:
-        fitness -= 1
-    if ant.has_food:
-        distance_traveled = self.compute_distance(ant.pos, self.colony_pos)
-        fitness += distance_traveled * 0.01
-    if not ant.has_food and ant.idle_time > self.max_idle_time:
-        fitness -= 0.5
-    if fitness > 10:
-        fitness = 10
-    return fitness
-```
-
 ## Auteurs
 
 - [IbouBD] - Créateur du projet.
