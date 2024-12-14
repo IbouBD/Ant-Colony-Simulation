@@ -70,8 +70,4 @@ def compute_fitness(self, ant):
 
 ## Auteurs
 
-- [Ibou] - Créateur du projet.
-
----
-
-N'hésitez pas à ajuster le contenu en fonction de vos besoins spécifiques et des détails supplémentaires que vous pourriez vouloir inclure. Bonne chance avec votre projet ! 🚀🐜🍀
+- [IbouBD] - Créateur du projet.
