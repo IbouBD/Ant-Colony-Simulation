@@ -442,7 +442,7 @@ steps = 150
 config_path = 'config.txt'
 generations = 10000
 pop_size = 50
-display = True
+display = True # En 'True' on teste la population. En 'False' on entraine la population
 env_size = 50
 # temps < 0.5 seconds pour 1 générations avec une population de 50 fourmis
 
