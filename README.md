@@ -1,6 +1,3 @@
-Bien sûr, je vais créer un fichier README pour votre projet en prenant en compte sa structure et les fichiers que vous avez mentionnés. Voici une version de base :
-
----
 
 # Simulateur de Comportement Collectif des Fourmis avec NEAT
 
@@ -9,7 +6,6 @@ Ce projet simule le comportement collectif d'une colonie de fourmis dans un envi
 ## Structure du Projet
 
 - `README.md` : Documentation et explication du projet.
-- `ant_env.py` : Contient la définition de l'environnement des fourmis.
 - `colony.py` : Contient la logique de la colonie de fourmis et leur comportement.
 - `config.txt` : Fichier de configuration pour l'algorithme NEAT.
 - `simulation.py` : Code principal pour la simulation et l'évolution des fourmis.
@@ -20,11 +16,13 @@ Ce projet simule le comportement collectif d'une colonie de fourmis dans un envi
 - Bibliothèques nécessaires :
   - `neat-python`
   - `numpy`
+  - `pygame`
+  - `pickle`
 
 Pour installer les bibliothèques nécessaires, utilisez la commande suivante :
 
 ```bash
-pip install neat-python numpy
+pip install neat-python numpy pygame pickle
 ```
 
 ## Utilisation
@@ -36,13 +34,6 @@ pip install neat-python numpy
    ```bash
    python simulation.py
    ```
-
-3. **Tester les Réseaux** :
-
-   ```bash
-   python simulation.py --test best_gen.pkl
-   ```
-
 ## Fonctionnalités
 
 - **Environnement Dynamique** : Les fourmis évoluent dans un environnement où la disposition des fruits est inconnue.
@@ -79,11 +70,7 @@ def compute_fitness(self, ant):
 
 ## Auteurs
 
-- [Votre Nom] - Créateur du projet.
-
-## Licence
-
-Ce projet est sous licence MIT - voir le fichier [LICENSE](LICENSE) pour plus de détails.
+- [Ibou] - Créateur du projet.
 
 ---
 
