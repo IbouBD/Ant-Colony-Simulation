@@ -1,9 +1,11 @@
+import neat.population
 import numpy as np
 import pygame
 from colony import Ant
 import random
 import neat
 import pickle
+from icecream import ic
 
 CELL_SIZE = 10  # Taille d'une cellule en pixels
 
@@ -72,6 +74,10 @@ class Environment:
         x, y = pos
         self.grid[y:y+height, x:x+width] = 2  # 2 représente la nourriture
 
+
+    def mark_position_as_occupied_by_empty_space(self, pos = tuple, width=1, height=1):
+        x, y = pos
+        self.grid[y:y+height, x:x+width] = 5  # 5 représente un espace vide
 
     def safe_zone(self):
         """Marque une zone sauve pour les fourmis"""
@@ -275,7 +281,7 @@ class Environment:
                         if pheromone_type == 0:
                             pheromone_color = (alpha, 0, alpha)  # violet translucide pour les phéromones de type 0
                         if pheromone_type == 1:
-                            pheromone_color = (alpha, 0, 0)  # rouge translucide pour les phéromones de type 1
+                            pheromone_color = (alpha, 0, 0)      # rouge translucide pour les phéromones de type 1
                         if pheromone_type == 2:
                             pheromone_color = (0, alpha, alpha)  # bleu translucide pour les phéromones de type 2
                         if pheromone_color == (0, 0, 0):
@@ -287,12 +293,21 @@ class Simulation:
     def __init__(self, width = int, height = int, num_ants = int, num_food = int):
         self.env = Environment(width, height)
         self.colony_pos = (width // 2, height // 2)
+        self.colony_radius = 5 # taille de la colonie
         self.env.mark_position_as_occupied(self.colony_pos)
         self.ants = [Ant(self.colony_pos[0], self.colony_pos[1], self.env) for _ in range(num_ants)]
         self.env.generate_food(num_food)
         self.num_food = num_food
         self.total_food_collected = self.compute_total_food_collected(self.ants)
         self.max_idle_time = 150 # Exemple de temps max d'inactivité
+        self.x_min = max(0, self.colony_pos[0] - self.colony_radius)
+        self.x_max = min(self.env.width, self.colony_pos[0] + self.colony_radius + 1)
+        self.y_min = max(0, self.colony_pos[1] - self.colony_radius)
+        self.y_max = min(self.env.height, self.colony_pos[1] + self.colony_radius + 1)
+
+        for x in range(self.x_min, self.x_max):
+            for y in range(self.y_min, self.y_max):
+                self.env.mark_position_as_occupied_by_empty_space((y, x))
 
     def compute_total_food_collected(self, ants): 
         return sum(ant.has_food for ant in ants) 
@@ -312,50 +327,58 @@ class Simulation:
     
     def compute_fitness(self, ant):
         """
-        Calcule la fitness d'une fourmi pour encourager la collecte de tous les fruits.
-
-        :param ant: L'objet fourmi.
-        :return: Fitness calculée pour cette fourmi.
+        Calcule la fitness d'une fourmi.
         """
         fitness = 0
+        max_reward = 100.0  # Récompense maximale collective
 
-        # Récompense individuelle pour ramasser un fruit
+        # Mise à jour collective du total de nourriture
+        self.total_food_collected = sum(1 for ant in self.ants if ant.has_food)
+        progress_ratio = self.total_food_collected / self.num_food
+
+        # 1. **Récompense pour ramassage de nourriture**
         if ant.has_food:
-            fitness += 3  # Encourager la collecte individuelle
+            fitness += 10  # Récompense modérée pour collecte individuelle
 
-        # Pénalité pour ne pas déposer des phéromones
-        if not ant.deposit_pheromone:
-            fitness -= 3  # Pénaliser la non-déposition de phérom
+        # 2. **Récompense pour retour à la colonie**
+        x_min = max(0, self.colony_pos[0] - self.colony_radius)
+        x_max = min(self.env.width, self.colony_pos[0] + self.colony_radius + 1)
+        y_min = max(0, self.colony_pos[1] - self.colony_radius)
+        y_max = min(self.env.height, self.colony_pos[1] + self.colony_radius + 1)
 
-        # Récompense supplémentaire pour ramener un fruit à la colonie
         x, y = int(ant.pos[0]), int(ant.pos[1])
-        if (x, y) == self.colony_pos and ant.has_food:
-            fitness += 4  # Récompense élevée pour un retour réussi
-            ant.has_food = False  # Le fruit est déposé à la colonie
+        if x_min <= x <= x_max and y_min <= y <= y_max and ant.has_food:
+            fitness += 30  # Récompense significative pour retour réussi
+            ant.has_food = False  # Dépose la nourriture
 
-        # Récompense collective proportionnelle au progrès global
-        if self.total_food_collected > 0:
-            progress_ratio = self.total_food_collected / self.num_food
-            fitness += 1.5 * progress_ratio  # Encourage la collaboration
+        # 3. **Pénalité pour immobilité**
+        distance_traveled = np.linalg.norm(ant.pos - ant.old_pos)
+        if distance_traveled < 10:  # Seuil minimal de mouvement
+            fitness -= 5.0  # Pénalité plus forte pour éviter la stagnation
 
-        # Pénalité pour mort
+        # 4. **Récompense pour exploration**
+        current_pos = tuple(ant.pos)
+        if current_pos not in ant.visited_positions:
+            ant.visited_positions.add(current_pos)
+            fitness += 1.0  # Récompense pour chaque nouvelle position explorée
+
+        # 5. **Récompense pour dépôt de phéromones**
+        if ant.deposit_pheromone:
+            fitness += 3  # Récompense légère pour encouragement à la communication
+
+        # 6. **Progression collective**
+        fitness += progress_ratio * 50  # Récompense proportionnelle aux progrès collectifs
+
+        # 7. **Pénalité pour mort**
         if ant.is_dead:
-            fitness -= 1  # Pénalité pour mort
+            fitness -= 20  # Pénalité significative pour mort
 
-        # Bonus pour distance parcourue avec un fruit (encourage l'exploration efficace)
-        if ant.has_food:
-            distance_traveled = self.compute_distance(ant.pos, self.colony_pos)
-            fitness += distance_traveled * 0.01  # Récompense pour l'exploration efficace
-
-        # Pénalité pour comportements inefficaces (par exemple, trop de temps sans ramasser de fruit)
-        if not ant.has_food and ant.idle_time > self.max_idle_time:
-            fitness -= 0.5
-
-        # Limiter la fitness maximale à 10
-        if fitness > 10:
-            fitness = 10
+        # 8. **Bonus final pour objectif atteint**
+        if self.total_food_collected == self.num_food:
+            fitness += max_reward  # Bonus pour collecte complète
 
         return fitness
+
 
 
 
@@ -372,7 +395,7 @@ class Simulation:
 
     def update_ant(self, ant, genome, net):
         """Met à jour une seule fourmi."""
-        x = ant.get_inputs(self.env)
+        x = ant.get_inputs(self.env, self.ants)
         output = net.activate(x)
         # Déplacer la fourmi de manière aléatoire
         #rx, ry = random.randint(-1, 1), random.randint(-1, 1)
@@ -440,19 +463,11 @@ class Simulation:
 
 steps = 150
 config_path = 'config.txt'
-generations = 10000
+generations = 50000
 pop_size = 50
-display = True # En 'True' on teste la population. En 'False' on entraine la population
+display = False # En 'True' on teste la population. En 'False' on entraine la population
 env_size = 50
 # temps < 0.5 seconds pour 1 générations avec une population de 50 fourmis
-
-# Charger le meilleur génome sauvegardé
-with open('best_genome.pkl', 'rb') as f:
-    best_genome = pickle.load(f)
-
-# Charger la population
-with open('population.pkl', 'rb') as f:
-    population = pickle.load(f)
 
 def eval_genomes(genomes, config):
     # Création de l'environnement
@@ -497,7 +512,7 @@ def run(config_path):
         pickle.dump(p.population, f)
 
 
-def test(genomes, config_path):
+def test(genomes, config_path, all):
     """
     Fonction pour tester les réseaux neuronaux générés par la génération précédente en chargeant le meilleur génome.
 
@@ -510,11 +525,17 @@ def test(genomes, config_path):
                          config_path)
     
     population = neat.Population(config)
-    
-    # Charger le génome passé en argument
-    for genome_id, genome in genomes:
-        genome_id = 0  # ID de la population pour le meilleur génome
-        population.population[genome_id] = genome
+
+    if all == True:
+        # Charger la population
+        with open('pop.pkl', 'rb') as f:
+            pop = pickle.load(f)
+        population.population = pop
+    else :
+        # Charger le génome passé en argument
+        for genome_id, genome in genomes:
+            genome_id = 0  # ID de la population pour le meilleur génome
+            population.population[genome_id] = genome
 
     # Ajouter des reporters pour visualiser les résultats
     population.add_reporter(neat.StdOutReporter(True))
@@ -528,7 +549,7 @@ def test(genomes, config_path):
         population = neat.Population(config)  # Réinitialiser la population avec la même configuration
         winner = population.run(eval_genomes, 1)  # Exécuter pour une seule génération
 
-def replay_genome(config_path='config.txt', genome_path="best_gen.pkl"):
+def replay_genome(all, config_path='config.txt', genome_path="best_gen.pkl"):
     """
     Fonction pour rejouer un génome sauvegardé.
 
@@ -541,10 +562,10 @@ def replay_genome(config_path='config.txt', genome_path="best_gen.pkl"):
         genome = pickle.load(f)
 
     # Convertir le génome chargé en une structure de données requise
-    genomes = [(1, genome)]
-
+    genomes = [(pop_size, genome)]
+    ic(genomes)
     # Appeler la fonction de test avec le génome chargé
-    test(genomes, config_path)
+    test(genomes, config_path, all)
 
 
 if display == False:
@@ -552,6 +573,4 @@ if display == False:
     run(config_path)
 else:
     # Tester le meilleur genome
-    replay_genome()
-
-# faire attention au surapprentissage, 
+    replay_genome(all = False)
